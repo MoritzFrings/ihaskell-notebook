@@ -1,13 +1,10 @@
-# https://quay.io/repository/jupyter/base-notebook
-# x86_64-lab-4.4.10
-ARG BASE_CONTAINER=quay.io/jupyter/base-notebook@sha256:2696c38269f400d51b9be613c7086806fa9615afbbad5a24449e3243b933a13c
-FROM $BASE_CONTAINER
+# Use the multi-arch tag to also support ARM64 version
+FROM quay.io/jupyter/base-notebook@sha256:1b5f7be5d646dff573b0e8275649d954d07a5432597b3e5fe22654148caeec3f
 
 LABEL maintainer="James Brock <jamesbrock@gmail.com>"
 
 # Extra arguments to `stack build`. Used to build --fast, see Makefile.
-ARG STACK_ARGS=
-
+ARG STACK_ARGS="-j 1" # TODO remove this flag later on?
 USER root
 
 # The global snapshot package database will be here in the STACK_ROOT.
@@ -54,17 +51,15 @@ RUN apt-get update && apt-get install -yq --no-install-recommends \
 # Clean up apt
     rm -rf /var/lib/apt/lists/*
 
-# Stack Linux (generic) Manual download
-# https://docs.haskellstack.org/en/stable/install_and_upgrade/#linux-generic
-#
-# So that we can control Stack version, we do manual install instead of
-# automatic install:
-#
-#    curl -sSL https://get.haskellstack.org/ | sh
-#
+# Architecture-aware Stack download
 ARG STACK_VERSION="3.5.1"
-ARG STACK_BINDIST="stack-${STACK_VERSION}-linux-x86_64"
-RUN    cd /tmp \
+RUN cd /tmp \
+    && ARCH=$(uname -m) \
+    && if [ "$ARCH" = "aarch64" ]; then \
+         STACK_BINDIST="stack-${STACK_VERSION}-linux-aarch64"; \
+       else \
+         STACK_BINDIST="stack-${STACK_VERSION}-linux-x86_64"; \
+       fi \
     && curl -sSL --output ${STACK_BINDIST}.tar.gz https://github.com/commercialhaskell/stack/releases/download/v${STACK_VERSION}/${STACK_BINDIST}.tar.gz \
     && tar zxf ${STACK_BINDIST}.tar.gz \
     && cp ${STACK_BINDIST}/stack /usr/bin/stack \
@@ -81,14 +76,14 @@ RUN fix-permissions /etc/stack
 # https://docs.haskellstack.org/en/stable/yaml_configuration/#yaml-configuration
 RUN mkdir -p $STACK_ROOT/global-project
 COPY global-project.stack.yaml $STACK_ROOT/global-project/stack.yaml
-RUN    chown --recursive $NB_UID:users $STACK_ROOT/global-project \
+RUN chown --recursive $NB_UID:users $STACK_ROOT/global-project \
     && fix-permissions $STACK_ROOT/global-project
 
 # fix-permissions for /usr/local/share/jupyter so that we can install
 # the IHaskell kernel there. Seems like the best place to install it, see
 #      jupyter --paths
 #      jupyter kernelspec list
-RUN    mkdir -p /usr/local/share/jupyter \
+RUN mkdir -p /usr/local/share/jupyter \
     && fix-permissions /usr/local/share/jupyter \
     && mkdir -p /usr/local/share/jupyter/kernels \
     && fix-permissions /usr/local/share/jupyter/kernels
@@ -96,7 +91,7 @@ RUN    mkdir -p /usr/local/share/jupyter \
 # Now make a bin directory for installing the ihaskell executable on
 # the PATH. This /opt/bin is referenced by the stack non-project-specific
 # config.
-RUN    mkdir -p /opt/bin \
+RUN mkdir -p /opt/bin \
     && fix-permissions /opt/bin
 ENV PATH ${PATH}:/opt/bin
 
@@ -114,8 +109,8 @@ ARG IHASKELL_COMMIT=70d25a03c5a76730ee454a99c4ea04ae7f539391
 # ihaskell-hvega-0.5.0.6
 ARG HVEGA_COMMIT=5e18d53b7748dc5e23c6cd6c38dc722f01e2dde6
 
-# Clone IHaskell and install ghc from the IHaskell resolver
-RUN    cd /opt \
+# Clone IHaskell and install ghc natively
+RUN cd /opt \
     && curl -L "https://github.com/gibiansky/IHaskell/tarball/$IHASKELL_COMMIT" | tar xzf - \
     && mv *IHaskell* IHaskell \
     && curl -L "https://github.com/DougBurke/hvega/tarball/$HVEGA_COMMIT" | tar xzf - \
@@ -132,13 +127,13 @@ RUN    cd /opt \
 #
 # Note that we are NOT in the /opt/IHaskell directory here, we are
 # installing ihaskell via the paths given in /opt/stack/global-project/stack.yaml
-RUN    stack build $STACK_ARGS ihaskell \
+RUN stack build $STACK_ARGS ihaskell \
     && fix-permissions /opt/IHaskell \
     && fix-permissions $STACK_ROOT
 
 # Install IHaskell.Display libraries
 # https://github.com/gibiansky/IHaskell/tree/master/ihaskell-display
-RUN    stack build $STACK_ARGS ihaskell-aeson \
+RUN stack build $STACK_ARGS ihaskell-aeson \
     && stack build $STACK_ARGS ihaskell-blaze \
     && stack build $STACK_ARGS ihaskell-charts \
     && stack build $STACK_ARGS ihaskell-diagrams \
@@ -146,10 +141,7 @@ RUN    stack build $STACK_ARGS ihaskell-aeson \
     && stack build $STACK_ARGS ihaskell-graphviz \
     && stack build $STACK_ARGS ihaskell-hatex \
     && stack build $STACK_ARGS ihaskell-juicypixels \
-#   && stack build $STACK_ARGS ihaskell-magic \
     && stack build $STACK_ARGS ihaskell-plot \
-#   && stack build $STACK_ARGS ihaskell-rlangqq \
-#   && stack build $STACK_ARGS ihaskell-static-canvas \
     && stack build $STACK_ARGS ihaskell-widgets \
     && stack build $STACK_ARGS hvega \
     && stack build $STACK_ARGS ihaskell-hvega \
@@ -211,7 +203,7 @@ RUN conda install --quiet --yes \
 ARG EXAMPLES_PATH=/home/$NB_USER/ihaskell_examples
 
 # Collect all the IHaskell example notebooks in EXAMPLES_PATH.
-RUN    mkdir -p $EXAMPLES_PATH \
+RUN mkdir -p $EXAMPLES_PATH \
     && cd $EXAMPLES_PATH \
     && mkdir -p ihaskell \
     && cp --recursive /opt/IHaskell/notebooks/* ihaskell/ \
@@ -238,4 +230,3 @@ RUN    mkdir -p $EXAMPLES_PATH \
 #     conda clean --all -f -y && \
 #     fix-permissions "${CONDA_DIR}" && \
 #     fix-permissions "/home/${NB_USER}"
-
