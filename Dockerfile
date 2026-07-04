@@ -16,38 +16,38 @@ RUN fix-permissions $STACK_ROOT
 
 # Install system dependencies (Core Haskell and IHaskell dependencies only)
 RUN apt-get update && apt-get install -yq --no-install-recommends \
-        python3-pip \
-        git \
-        libtinfo-dev \
-        libzmq3-dev \
-        libffi-dev \
-        libgmp-dev \
-        gnupg \
-        netbase \
-        curl \
-        pkg-config \
-        # Stack Debian/Ubuntu manual install dependencies
-        # https://docs.haskellstack.org/en/stable/install_and_upgrade/#linux-generic
-        g++ \
-        gcc \
-        libc6-dev \
-        make \
-        xz-utils \
-        zlib1g-dev \
-        # Need less for general maintenance
-        less && \
-        # Clean up apt
-        rm -rf /var/lib/apt/lists/*
+    python3-pip \
+    git \
+    libtinfo-dev \
+    libzmq3-dev \
+    libffi-dev \
+    libgmp-dev \
+    gnupg \
+    netbase \
+    curl \
+    pkg-config \
+    # Stack Debian/Ubuntu manual install dependencies
+    # https://docs.haskellstack.org/en/stable/install_and_upgrade/#linux-generic
+    g++ \
+    gcc \
+    libc6-dev \
+    make \
+    xz-utils \
+    zlib1g-dev \
+    # Need less for general maintenance
+    less && \
+    # Clean up apt
+    rm -rf /var/lib/apt/lists/*
 
 # Architecture-aware Stack download
 ARG STACK_VERSION="3.5.1"
 RUN cd /tmp \
     && ARCH=$(uname -m) \
     && if [ "$ARCH" = "aarch64" ]; then \
-         STACK_BINDIST="stack-${STACK_VERSION}-linux-aarch64"; \
-       else \
-         STACK_BINDIST="stack-${STACK_VERSION}-linux-x86_64"; \
-       fi \
+    STACK_BINDIST="stack-${STACK_VERSION}-linux-aarch64"; \
+    else \
+    STACK_BINDIST="stack-${STACK_VERSION}-linux-x86_64"; \
+    fi \
     && curl -sSL --output ${STACK_BINDIST}.tar.gz https://github.com/commercialhaskell/stack/releases/download/v${STACK_VERSION}/${STACK_BINDIST}.tar.gz \
     && tar zxf ${STACK_BINDIST}.tar.gz \
     && cp ${STACK_BINDIST}/stack /usr/bin/stack \
@@ -152,13 +152,13 @@ USER root
 
 # Install display system dependencies (Cairo, Pango, Graphviz, Gnuplot, etc.)
 RUN apt-get update && apt-get install -yq --no-install-recommends \
-        libcairo2-dev \
-        libpango1.0-dev \
-        libmagic-dev \
-        libblas-dev \
-        liblapack-dev \
-        graphviz \
-        gnuplot-nox && \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libmagic-dev \
+    libblas-dev \
+    liblapack-dev \
+    graphviz \
+    gnuplot-nox && \
     rm -rf /var/lib/apt/lists/*
 
 # Install IHaskell.Display libraries and immediately clean up artifacts
@@ -189,11 +189,12 @@ RUN stack build $STACK_ARGS ihaskell-aeson \
 # Switch to jovyan user for runtime configuration
 USER $NB_UID
 
-RUN conda install --quiet --yes \
-# ihaskell-widgets needs ipywidgets
+# add -vvv as debug
+RUN conda install --quiet --yes -vvv \
+    # ihaskell-widgets needs ipywidgets
     'ipywidgets=8.1.7' && \
-# ihaskell-hvega doesn't need an extension. https://github.com/jupyterlab/jupyter-renderers
-#    'jupyterlab-vega3' && \
+    # ihaskell-hvega doesn't need an extension. https://github.com/jupyterlab/jupyter-renderers
+    #    'jupyterlab-vega3' && \
     conda clean --all -f -y && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
