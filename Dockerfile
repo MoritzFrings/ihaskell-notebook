@@ -1,5 +1,7 @@
-# Use the multi-arch tag to also support ARM64 version
-FROM quay.io/jupyter/base-notebook@sha256:1b5f7be5d646dff573b0e8275649d954d07a5432597b3e5fe22654148caeec3f
+ARG BASE_CONTAINER=quay.io/jupyter/base-notebook@sha256:1b5f7be5d646dff573b0e8275649d954d07a5432597b3e5fe22654148caeec3f
+ARG BASE_IMAGE=base
+
+FROM $BASE_CONTAINER AS base
 
 LABEL maintainer="James Brock <jamesbrock@gmail.com>"
 
@@ -12,34 +14,22 @@ ENV STACK_ROOT=/opt/stack
 RUN mkdir -p $STACK_ROOT
 RUN fix-permissions $STACK_ROOT
 
-# Install system dependencies
+# Install system dependencies (Core Haskell and IHaskell dependencies only)
 RUN apt-get update && apt-get install -yq --no-install-recommends \
         python3-pip \
         git \
         libtinfo-dev \
         libzmq3-dev \
-        libcairo2-dev \
-        libpango1.0-dev \
-        libmagic-dev \
-        libblas-dev \
-        liblapack-dev \
         libffi-dev \
         libgmp-dev \
         gnupg \
         netbase \
-# for ihaskell-graphviz
-        graphviz \
-# for ihaskell-gnuplot
-        gnuplot-nox \
-# for Stack download
         curl \
 # Stack Debian/Ubuntu manual install dependencies
 # https://docs.haskellstack.org/en/stable/install_and_upgrade/#linux-generic
         g++ \
         gcc \
         libc6-dev \
-        libffi-dev \
-        libgmp-dev \
         make \
         xz-utils \
         zlib1g-dev \
@@ -131,6 +121,47 @@ RUN stack build $STACK_ARGS ihaskell \
     && fix-permissions /opt/IHaskell \
     && fix-permissions $STACK_ROOT
 
+# Bug workaround for https://github.com/IHaskell/ihaskell-notebook/issues/9
+RUN mkdir -p /home/jovyan/.local/share/jupyter/runtime \
+    && fix-permissions /home/jovyan/.local \
+    && fix-permissions /home/jovyan/.local/share \
+    && fix-permissions /home/jovyan/.local/share/jupyter \
+    && fix-permissions /home/jovyan/.local/share/jupyter/runtime
+
+# Install system-level ghc using the ghc which was installed by stack
+# using the IHaskell resolver.
+RUN mkdir -p /opt/ghc && ln -s `stack path --compiler-bin` /opt/ghc/bin \
+    && fix-permissions /opt/ghc
+ENV PATH=${PATH}:/opt/ghc/bin
+
+# Switch back to jovyan user to install kernel
+USER $NB_UID
+RUN stack exec ihaskell -- install --stack --prefix=/usr/local
+
+# Cleanup base GHC installer tarballs and intermediate object files to optimize base image size
+USER root
+RUN rm -f /opt/stack/programs/*-linux/ghc*.tar.xz \
+    && find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete
+USER $NB_UID
+
+
+# ============================================================================
+# Stage 2: Full (AS full)
+# ============================================================================
+FROM $BASE_IMAGE AS full
+USER root
+
+# Install display system dependencies (Cairo, Pango, Graphviz, Gnuplot, etc.)
+RUN apt-get update && apt-get install -yq --no-install-recommends \
+        libcairo2-dev \
+        libpango1.0-dev \
+        libmagic-dev \
+        libblas-dev \
+        liblapack-dev \
+        graphviz \
+        gnuplot-nox && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install IHaskell.Display libraries
 # https://github.com/gibiansky/IHaskell/tree/master/ihaskell-display
 RUN stack build $STACK_ARGS ihaskell-aeson \
@@ -150,45 +181,8 @@ RUN stack build $STACK_ARGS ihaskell-aeson \
     && fix-permissions /opt/IHaskell \
     && fix-permissions /opt/hvega
 
-# Cleanup
-# Don't clean IHaskell/.stack-work, 7GB, this causes issue #5
-#   && rm -rf $(find /opt/IHaskell -type d -name .stack-work) \
-# Don't clean /opt/hvega
-# We can't actually figure out anything to cleanup.
-
-# Bug workaround for https://github.com/IHaskell/ihaskell-notebook/issues/9
-RUN mkdir -p /home/jovyan/.local/share/jupyter/runtime \
-    && fix-permissions /home/jovyan/.local \
-    && fix-permissions /home/jovyan/.local/share \
-    && fix-permissions /home/jovyan/.local/share/jupyter \
-    && fix-permissions /home/jovyan/.local/share/jupyter/runtime
-
-# Install system-level ghc using the ghc which was installed by stack
-# using the IHaskell resolver.
-RUN mkdir -p /opt/ghc && ln -s `stack path --compiler-bin` /opt/ghc/bin \
-    && fix-permissions /opt/ghc
-ENV PATH=${PATH}:/opt/ghc/bin
-
-# Switch back to jovyan user
+# Switch to jovyan user for runtime configuration
 USER $NB_UID
-
-RUN \
-# Install the IHaskell kernel at /usr/local/share/jupyter/kernels, which is
-# in `jupyter --paths` data:
-       stack exec ihaskell -- install --stack --prefix=/usr/local
-
-# # We don't need to install the ihaskell_labextension for JupyterLab syntax highlighting
-# # https://github.com/IHaskell/IHaskell/issues/1238#issuecomment-907658217
-#     && npm install -g typescript \
-#     && cd /opt/IHaskell/jupyterlab-ihaskell \
-#     && npm install \
-#     && npm run build \
-#     && jupyter labextension install . \
-# # Cleanup
-#     && npm cache clean --force \
-#     && rm -rf /home/$NB_USER/.cache/yarn \
-# # Clean jupyterlab-ihaskell/node_nodemodules, 86MB
-#     && rm -rf /opt/IHaskell/jupyterlab-ihaskell/node_modules
 
 RUN conda install --quiet --yes \
 # ihaskell-widgets needs ipywidgets
@@ -224,9 +218,8 @@ RUN mkdir -p $EXAMPLES_PATH \
     && cp /opt/IHaskell/ihaskell-display/ihaskell-plot/PlotExample.ipynb ihaskell-plot/ \
     && fix-permissions $EXAMPLES_PATH
 
-# Enable this for debugging the kernel messages
-# RUN conda install --quiet --yes \
-#     'jupyterlab-kernelspy' && \
-#     conda clean --all -f -y && \
-#     fix-permissions "${CONDA_DIR}" && \
-#     fix-permissions "/home/${NB_USER}"
+# Cleanup intermediate display library build files to optimize final image size
+USER root
+RUN find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
+    && find /opt/hvega -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete
+USER $NB_UID

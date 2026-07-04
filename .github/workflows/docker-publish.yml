@@ -12,7 +12,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build:
+  build-base:
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -34,7 +34,6 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log into registry ${{ env.REGISTRY }}
-        # if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -45,38 +44,37 @@ jobs:
         run: |
           echo "IMAGE_NAME_LOWER=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-      - name: Build and push by digest
+      - name: Build and push base by digest
         id: build
         uses: docker/build-push-action@v7
         with:
           context: .
+          target: base
           platforms: ${{ matrix.platform }}
-          # push: ${{ github.event_name != 'pull_request' }}
-          # outputs: ${{ (github.event_name != 'pull_request') && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) || '' }}
-          outputs: ${{ format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) }}
-          cache-from: type=gha,scope=${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) || '' }}
+          cache-from: type=gha,scope=${{ matrix.platform }}-base
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}-base
 
       - name: Export digest
-        # if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        # if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ strategy.job-index }}
+          name: digests-base-${{ strategy.job-index }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
 
-  merge:
+  merge-base:
     runs-on: ubuntu-latest
-    # if: github.event_name != 'pull_request'
-    needs: build
+    if: github.event_name != 'pull_request'
+    needs: build-base
     permissions:
       packages: write
     steps:
@@ -84,14 +82,130 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: /tmp/digests
-          pattern: digests-*
+          pattern: digests-base-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log into registry ${{ env.REGISTRY }}
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            suffix=-base,onlatest=true
+
+      - name: Lowercase image name
+        run: |
+          echo "IMAGE_NAME_LOWER=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.IMAGE_NAME_LOWER }}@sha256:%s ' *)
+
+  build-full:
+    runs-on: ${{ matrix.runner }}
+    needs: [build-base, merge-base]
+    if: |
+      always() &&
+      (needs.build-base.result == 'success') &&
+      (needs.merge-base.result == 'success' || needs.merge-base.result == 'skipped')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lowercase image name
+        run: |
+          echo "IMAGE_NAME_LOWER=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Set base image build arg
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "BASE_IMAGE_ARG=base" >> $GITHUB_ENV
+          else
+            echo "BASE_IMAGE_ARG=${{ env.IMAGE_NAME_LOWER }}:${{ github.ref_name }}-base" >> $GITHUB_ENV
+          fi
+
+      - name: Build and push full by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: full
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE_ARG }}
+          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) || '' }}
+          cache-from: type=gha,scope=${{ matrix.platform }}-full
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}-full
+
+      - name: Export digest
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-full-${{ strategy.job-index }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-full:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    needs: build-full
+    permissions:
+      packages: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-full-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
