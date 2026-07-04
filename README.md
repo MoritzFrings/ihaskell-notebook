@@ -179,6 +179,58 @@ docker build --build-arg BASE_CONTAINER=jupyter/scipy-notebook --rm --force-rm -
 ```
 
 
+## VS Code Dev Containers (Alternative Development Setup)
+
+You can use the published multi-architecture image as a **VS Code Dev Container** in your own Haskell work or homework repositories. This allows students to open a workspace in VS Code and write Haskell inside Jupyter Notebooks instantly, without needing to install GHC, Stack, or Jupyter on their local machine.
+
+### Setup Instructions
+
+1. **Prerequisites**: Ensure you have installed [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Podman), [Visual Studio Code](https://code.visualstudio.com/), and the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers).
+2. **Create the Configuration**: In your homework/work repository, create a directory named `.devcontainer` and add a `devcontainer.json` file inside it.
+3. **Add the Template**: Copy and paste the following optimized configuration:
+
+```json
+{
+  "name": "Haskell Jupyter Workspace",
+  "image": "ghcr.io/moritzfrings/ihaskell-notebook:latest",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        "ms-toolsai.jupyter",
+        "justusadam.language-haskell"
+      ]
+    }
+  }
+}
+```
+
+4. **Launch the Container**:
+   - Open your project folder in VS Code.
+   - VS Code will detect the configuration and ask if you want to **Reopen in Container**. Click yes.
+   - Alternatively, press `Cmd/Ctrl + Shift + P`, type `Dev Containers: Reopen in Container`, and hit enter.
+   - VS Code will pull the pre-built image in seconds and initialize the environment.
+
+### Writing Haskell in Jupyter Notebooks
+- Create or open a `.ipynb` file in VS Code.
+- In the top-right corner of the notebook editor, click **Select Kernel** -> **Jupyter Kernel** -> select the **IHaskell** kernel.
+- You can now write and execute Haskell code directly in the cells. Autocomplete and tooltips inside the cells are handled natively by the running IHaskell kernel.
+
+> [!NOTE]
+> The `haskell.haskell` (Haskell Language Server) VS Code extension is omitted from this configuration because HLS is not installed in the container image. Autocomplete in Jupyter cells works out-of-the-box via the Jupyter extension, avoiding the overhead and startup errors of HLS.
+
+### Manual JupyterLab Browser Fallback
+If you prefer the web browser interface over VS Code's notebook editor:
+1. Open the VS Code integrated terminal (which runs inside the container).
+2. Start the Jupyter server:
+   ```bash
+   jupyter lab --ip=0.0.0.0 --port=8888 --no-browser
+   ```
+3. Command-click the output URL (usually `http://127.0.0.1:8888/...`) in the terminal to open JupyterLab in your local browser.
+
+
 ## References, Links, Credits
 
 [IHaskell on Hackage](http://hackage.haskell.org/package/ihaskell)
