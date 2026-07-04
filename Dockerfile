@@ -4,7 +4,7 @@ FROM quay.io/jupyter/base-notebook@sha256:1b5f7be5d646dff573b0e8275649d954d07a54
 LABEL maintainer="James Brock <jamesbrock@gmail.com>"
 
 # Extra arguments to `stack build`. Used to build --fast, see Makefile.
-ARG STACK_ARGS="-j 1" # TODO remove this flag later on?
+ARG STACK_ARGS=""
 USER root
 
 # The global snapshot package database will be here in the STACK_ROOT.
