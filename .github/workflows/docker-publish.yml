@@ -51,19 +51,20 @@ jobs:
           context: .
           target: base
           platforms: ${{ matrix.platform }}
-          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) || '' }}
+          # outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) || '' }}
+          outputs: ${{ format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) }}
           cache-from: type=gha,scope=${{ matrix.platform }}-base
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}-base
 
       - name: Export digest
-        if: github.event_name != 'pull_request'
+        # if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        if: github.event_name != 'pull_request'
+        # if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: digests-base-${{ strategy.job-index }}
@@ -73,7 +74,7 @@ jobs:
 
   merge-base:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    # if: github.event_name != 'pull_request'
     needs: build-base
     permissions:
       packages: write
@@ -153,7 +154,8 @@ jobs:
       - name: Set base image build arg
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "BASE_IMAGE_ARG=base" >> $GITHUB_ENV
+            # echo "BASE_IMAGE_ARG=base" >> $GITHUB_ENV
+            echo "BASE_IMAGE_ARG=${{ env.IMAGE_NAME_LOWER }}:${{ github.ref_name }}-base" >> $GITHUB_ENV
           else
             echo "BASE_IMAGE_ARG=${{ env.IMAGE_NAME_LOWER }}:${{ github.ref_name }}-base" >> $GITHUB_ENV
           fi
@@ -167,19 +169,20 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             BASE_IMAGE=${{ env.BASE_IMAGE_ARG }}
-          outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) || '' }}
+          # outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) || '' }}
+          outputs: ${{ format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) || '' }}
           cache-from: type=gha,scope=${{ matrix.platform }}-full
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}-full
 
       - name: Export digest
-        if: github.event_name != 'pull_request'
+        # if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        if: github.event_name != 'pull_request'
+        # if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: digests-full-${{ strategy.job-index }}
@@ -189,7 +192,7 @@ jobs:
 
   merge-full:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    # if: github.event_name != 'pull_request'
     needs: build-full
     permissions:
       packages: write
