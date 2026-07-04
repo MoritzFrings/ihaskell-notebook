@@ -117,7 +117,11 @@ RUN cd /opt \
     && find /opt/stack -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
     && find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
     && fix-permissions /opt/IHaskell \
-    && fix-permissions $STACK_ROOT
+    && fix-permissions $STACK_ROOT \ 
+    && rm -rf /opt/stack/pantry \
+    && rm -rf /opt/stack/programs/*-linux/ghc*/share/doc \
+    && rm -rf /opt/stack/programs/*-linux/ghc*/share/html \
+    && find /opt/stack/programs -name "*.haddock" -delete
 
 # Bug workaround for https://github.com/IHaskell/ihaskell-notebook/issues/9
 RUN mkdir -p /home/jovyan/.local/share/jupyter/runtime \
@@ -213,4 +217,8 @@ RUN mkdir -p $EXAMPLES_PATH \
     && cp /opt/hvega/notebooks/*.tsv ihaskell-hvega/ \
     && mkdir -p ihaskell-plot \
     && cp /opt/IHaskell/ihaskell-display/ihaskell-plot/PlotExample.ipynb ihaskell-plot/ \
-    && fix-permissions $EXAMPLES_PATH
+    && fix-permissions $EXAMPLES_PATH \
+    && rm -rf /opt/stack/pantry \
+    && rm -rf /opt/stack/programs/*-linux/ghc*/share/doc \
+    && rm -rf /opt/stack/programs/*-linux/ghc*/share/html \
+    && find /opt/stack/programs -name "*.haddock" -delete
