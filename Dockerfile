@@ -105,28 +105,34 @@ RUN stack --version \
     && fix-permissions /opt/IHaskell \
     && fix-permissions $STACK_ROOT \
     && fix-permissions /opt/hvega \
+    \
     && stack setup \
     && rm -f /opt/stack/programs/*-linux/ghc*.tar.xz \
+    \
     && stack build $STACK_ARGS ihaskell \
     && fix-permissions /opt/IHaskell \
     && fix-permissions $STACK_ROOT \
     # Install system-level ghc using the ghc which was installed by stack
     # using the IHaskell resolver.
-    && mkdir -p /opt/ghc && ln -s `stack path --compiler-bin` /opt/ghc/bin \
+    && mkdir -p /opt/ghc \
+    && ln -s `stack path --compiler-bin` /opt/ghc/bin \
     && fix-permissions /opt/ghc \
-    # Switch back to jovyan user to install kernel
-    && gosu $NB_UID stack exec ihaskell -- install --stack --prefix=/usr/local \
+    # Install kernel
+    && stack exec ihaskell -- install --stack --prefix=/usr/local \
     # Cache clean up
     && rm -rf /opt/IHaskell/.stack-work \
     && rm -rf /opt/hvega/.stack-work \
+    && rm -rf /opt/stack/global-project/.stack-work \
+    \
     && find /opt/stack/snapshots -type d -name "build" -exec rm -rf {} + \
     && find /opt/stack/programs -type f \( -name "*_p.a" -o -name "*.p_hi" \) -delete \
     && find /opt/stack -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
     && find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
+    && find /opt/stack/programs -name "*.haddock" -delete \
+    \
     && rm -rf /opt/stack/pantry \
     && rm -rf /opt/stack/programs/*-linux/ghc*/share/doc \
-    && rm -rf /opt/stack/programs/*-linux/ghc*/share/html \
-    && find /opt/stack/programs -name "*.haddock" -delete
+    && rm -rf /opt/stack/programs/*-linux/ghc*/share/html
 
 # Bug workaround for https://github.com/IHaskell/ihaskell-notebook/issues/9
 RUN mkdir -p /home/jovyan/.local/share/jupyter/runtime \
@@ -136,6 +142,7 @@ RUN mkdir -p /home/jovyan/.local/share/jupyter/runtime \
     && fix-permissions /home/jovyan/.local/share/jupyter/runtime
 
 ENV PATH=${PATH}:/opt/ghc/bin
+USER $NB_UID
 
 # ============================================================================
 # Stage 2: Full (AS full)
