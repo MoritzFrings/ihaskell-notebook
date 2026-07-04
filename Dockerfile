@@ -26,18 +26,18 @@ RUN apt-get update && apt-get install -yq --no-install-recommends \
         netbase \
         curl \
         pkg-config \
-# Stack Debian/Ubuntu manual install dependencies
-# https://docs.haskellstack.org/en/stable/install_and_upgrade/#linux-generic
+        # Stack Debian/Ubuntu manual install dependencies
+        # https://docs.haskellstack.org/en/stable/install_and_upgrade/#linux-generic
         g++ \
         gcc \
         libc6-dev \
         make \
         xz-utils \
         zlib1g-dev \
-# Need less for general maintenance
+        # Need less for general maintenance
         less && \
-# Clean up apt
-    rm -rf /var/lib/apt/lists/*
+        # Clean up apt
+        rm -rf /var/lib/apt/lists/*
 
 # Architecture-aware Stack download
 ARG STACK_VERSION="3.5.1"
@@ -51,18 +51,15 @@ RUN cd /tmp \
     && curl -sSL --output ${STACK_BINDIST}.tar.gz https://github.com/commercialhaskell/stack/releases/download/v${STACK_VERSION}/${STACK_BINDIST}.tar.gz \
     && tar zxf ${STACK_BINDIST}.tar.gz \
     && cp ${STACK_BINDIST}/stack /usr/bin/stack \
-    && rm -rf ${STACK_BINDIST}.tar.gz ${STACK_BINDIST} \
-    && stack --version
+    && rm -rf ${STACK_BINDIST}.tar.gz ${STACK_BINDIST}
 
 # Stack global non-project-specific config stack.config.yaml
 # https://docs.haskellstack.org/en/stable/yaml_configuration/#non-project-specific-config
-RUN mkdir -p /etc/stack
 COPY stack.config.yaml /etc/stack/config.yaml
 RUN fix-permissions /etc/stack
 
 # Stack global project stack.yaml
 # https://docs.haskellstack.org/en/stable/yaml_configuration/#yaml-configuration
-RUN mkdir -p $STACK_ROOT/global-project
 COPY global-project.stack.yaml $STACK_ROOT/global-project/stack.yaml
 RUN chown --recursive $NB_UID:users $STACK_ROOT/global-project \
     && fix-permissions $STACK_ROOT/global-project
@@ -99,7 +96,8 @@ ARG HVEGA_COMMIT=5e18d53b7748dc5e23c6cd6c38dc722f01e2dde6
 
 # Clone IHaskell and install ghc natively
 # Everything is chained in one RUN to prevent intermediate layers from bloating the image.
-RUN cd /opt \
+RUN stack --version \
+    && cd /opt \
     && curl -L "https://github.com/gibiansky/IHaskell/tarball/$IHASKELL_COMMIT" | tar xzf - \
     && mv *IHaskell* IHaskell \
     && curl -L "https://github.com/DougBurke/hvega/tarball/$HVEGA_COMMIT" | tar xzf - \
@@ -110,14 +108,21 @@ RUN cd /opt \
     && stack setup \
     && rm -f /opt/stack/programs/*-linux/ghc*.tar.xz \
     && stack build $STACK_ARGS ihaskell \
+    && fix-permissions /opt/IHaskell \
+    && fix-permissions $STACK_ROOT \
+    # Install system-level ghc using the ghc which was installed by stack
+    # using the IHaskell resolver.
+    && mkdir -p /opt/ghc && ln -s `stack path --compiler-bin` /opt/ghc/bin \
+    && fix-permissions /opt/ghc \
+    # Switch back to jovyan user to install kernel
+    && gosu $NB_UID stack exec ihaskell -- install --stack --prefix=/usr/local \
+    # Cache clean up
     && rm -rf /opt/IHaskell/.stack-work \
     && rm -rf /opt/hvega/.stack-work \
     && find /opt/stack/snapshots -type d -name "build" -exec rm -rf {} + \
     && find /opt/stack/programs -type f \( -name "*_p.a" -o -name "*.p_hi" \) -delete \
     && find /opt/stack -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
     && find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
-    && fix-permissions /opt/IHaskell \
-    && fix-permissions $STACK_ROOT \ 
     && rm -rf /opt/stack/pantry \
     && rm -rf /opt/stack/programs/*-linux/ghc*/share/doc \
     && rm -rf /opt/stack/programs/*-linux/ghc*/share/html \
@@ -130,15 +135,7 @@ RUN mkdir -p /home/jovyan/.local/share/jupyter/runtime \
     && fix-permissions /home/jovyan/.local/share/jupyter \
     && fix-permissions /home/jovyan/.local/share/jupyter/runtime
 
-# Install system-level ghc using the ghc which was installed by stack
-# using the IHaskell resolver.
-RUN mkdir -p /opt/ghc && ln -s `stack path --compiler-bin` /opt/ghc/bin \
-    && fix-permissions /opt/ghc
 ENV PATH=${PATH}:/opt/ghc/bin
-
-# Switch back to jovyan user to install kernel
-USER $NB_UID
-RUN stack exec ihaskell -- install --stack --prefix=/usr/local
 
 # ============================================================================
 # Stage 2: Full (AS full)
@@ -218,7 +215,6 @@ RUN mkdir -p $EXAMPLES_PATH \
     && mkdir -p ihaskell-plot \
     && cp /opt/IHaskell/ihaskell-display/ihaskell-plot/PlotExample.ipynb ihaskell-plot/ \
     && fix-permissions $EXAMPLES_PATH \
-    && rm -rf /opt/stack/pantry \
     && rm -rf /opt/stack/programs/*-linux/ghc*/share/doc \
     && rm -rf /opt/stack/programs/*-linux/ghc*/share/html \
     && find /opt/stack/programs -name "*.haddock" -delete
