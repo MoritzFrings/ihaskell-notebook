@@ -6,7 +6,7 @@ FROM $BASE_CONTAINER AS base
 LABEL maintainer="James Brock <jamesbrock@gmail.com>"
 
 # Extra arguments to `stack build`. Used to build --fast, see Makefile.
-ARG STACK_ARGS=""
+ARG STACK_ARGS="--no-library-profiling --no-executable-profiling --no-haddock"
 USER root
 
 # The global snapshot package database will be here in the STACK_ROOT.
@@ -136,9 +136,14 @@ ENV PATH=${PATH}:/opt/ghc/bin
 USER $NB_UID
 RUN stack exec ihaskell -- install --stack --prefix=/usr/local
 
-# Cleanup base GHC installer tarballs and intermediate object files to optimize base image size
+# Aggressive cleanup of GHC profiling files and intermediate Stack build artifacts
 USER root
 RUN rm -f /opt/stack/programs/*-linux/ghc*.tar.xz \
+    && rm -rf /opt/IHaskell/.stack-work \
+    && rm -rf /opt/hvega/.stack-work \
+    && find /opt/stack/snapshots -type d -name "build" -exec rm -rf {} + \
+    && find /opt/stack/programs -type f \( -name "*_p.a" -o -name "*.p_hi" \) -delete \
+    && find /opt/stack -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
     && find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete
 USER $NB_UID
 
@@ -216,8 +221,12 @@ RUN mkdir -p $EXAMPLES_PATH \
     && cp /opt/IHaskell/ihaskell-display/ihaskell-plot/PlotExample.ipynb ihaskell-plot/ \
     && fix-permissions $EXAMPLES_PATH
 
-# Cleanup intermediate display library build files to optimize final image size
+# Final cleanup of display library intermediate build states
 USER root
-RUN find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
+RUN rm -rf /opt/IHaskell/.stack-work \
+    && rm -rf /opt/hvega/.stack-work \
+    && find /opt/stack/snapshots -type d -name "build" -exec rm -rf {} + \
+    && find /opt/stack -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
+    && find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
     && find /opt/hvega -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete
 USER $NB_UID

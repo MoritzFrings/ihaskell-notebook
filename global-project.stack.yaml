@@ -45,3 +45,20 @@ extra-deps:
 - gtk2hs-buildtools-0.13.12.0
 - plot-0.2.3.12
 
+# Build Optimizations for Docker Environment
+build:
+  # Hardcode the disablement of profiling and docs so runtime user builds 
+  # don't accidentally bloat the container's storage.
+  library-profiling: false
+  executable-profiling: false
+  haddock: false
+  
+  # Aggressively strip symbols from compiled binaries. 
+  # Turning library-stripping on significantly reduces the size of installed .a/.so files.
+  executable-stripping: true
+  library-stripping: true
+
+ghc-options:
+  # Instruct GHC to omit DWARF debugging information (-g0) for all packages.
+  # We also optimize (-O) for standard performance without over-bloating the cache.
+  "$everything": -g0 -O
