@@ -98,6 +98,7 @@ ARG IHASKELL_COMMIT=70d25a03c5a76730ee454a99c4ea04ae7f539391
 ARG HVEGA_COMMIT=5e18d53b7748dc5e23c6cd6c38dc722f01e2dde6
 
 # Clone IHaskell and install ghc natively
+# Everything is chained in one RUN to prevent intermediate layers from bloating the image.
 RUN cd /opt \
     && curl -L "https://github.com/gibiansky/IHaskell/tarball/$IHASKELL_COMMIT" | tar xzf - \
     && mv *IHaskell* IHaskell \
@@ -107,15 +108,14 @@ RUN cd /opt \
     && fix-permissions $STACK_ROOT \
     && fix-permissions /opt/hvega \
     && stack setup \
-    && fix-permissions $STACK_ROOT
-# Clean 176MB
-    # && rm /opt/stack/programs/x86_64-linux/ghc*.tar.xz
-
-# Build IHaskell
-#
-# Note that we are NOT in the /opt/IHaskell directory here, we are
-# installing ihaskell via the paths given in /opt/stack/global-project/stack.yaml
-RUN stack build $STACK_ARGS ihaskell \
+    && rm -f /opt/stack/programs/*-linux/ghc*.tar.xz \
+    && stack build $STACK_ARGS ihaskell \
+    && rm -rf /opt/IHaskell/.stack-work \
+    && rm -rf /opt/hvega/.stack-work \
+    && find /opt/stack/snapshots -type d -name "build" -exec rm -rf {} + \
+    && find /opt/stack/programs -type f \( -name "*_p.a" -o -name "*.p_hi" \) -delete \
+    && find /opt/stack -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
+    && find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
     && fix-permissions /opt/IHaskell \
     && fix-permissions $STACK_ROOT
 
@@ -136,18 +136,6 @@ ENV PATH=${PATH}:/opt/ghc/bin
 USER $NB_UID
 RUN stack exec ihaskell -- install --stack --prefix=/usr/local
 
-# Aggressive cleanup of GHC profiling files and intermediate Stack build artifacts
-USER root
-RUN rm -f /opt/stack/programs/*-linux/ghc*.tar.xz \
-    && rm -rf /opt/IHaskell/.stack-work \
-    && rm -rf /opt/hvega/.stack-work \
-    && find /opt/stack/snapshots -type d -name "build" -exec rm -rf {} + \
-    && find /opt/stack/programs -type f \( -name "*_p.a" -o -name "*.p_hi" \) -delete \
-    && find /opt/stack -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
-    && find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete
-USER $NB_UID
-
-
 # ============================================================================
 # Stage 2: Full (AS full)
 # ============================================================================
@@ -165,7 +153,7 @@ RUN apt-get update && apt-get install -yq --no-install-recommends \
         gnuplot-nox && \
     rm -rf /var/lib/apt/lists/*
 
-# Install IHaskell.Display libraries
+# Install IHaskell.Display libraries and immediately clean up artifacts
 # https://github.com/gibiansky/IHaskell/tree/master/ihaskell-display
 RUN stack build $STACK_ARGS ihaskell-aeson \
     && stack build $STACK_ARGS ihaskell-blaze \
@@ -179,8 +167,14 @@ RUN stack build $STACK_ARGS ihaskell-aeson \
     && stack build $STACK_ARGS ihaskell-widgets \
     && stack build $STACK_ARGS hvega \
     && stack build $STACK_ARGS ihaskell-hvega \
+    && rm -rf /opt/IHaskell/.stack-work \
+    && rm -rf /opt/hvega/.stack-work \
+    && find /opt/stack/snapshots -type d -name "build" -exec rm -rf {} + \
+    && find /opt/stack -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
+    && find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
+    && find /opt/hvega -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
     && fix-permissions $STACK_ROOT \
-# Fix for https://github.com/IHaskell/ihaskell-notebook/issues/14#issuecomment-636334824
+    # Fix for https://github.com/IHaskell/ihaskell-notebook/issues/14#issuecomment-636334824
     && fix-permissions /opt/IHaskell \
     && fix-permissions /opt/hvega
 
@@ -220,13 +214,3 @@ RUN mkdir -p $EXAMPLES_PATH \
     && mkdir -p ihaskell-plot \
     && cp /opt/IHaskell/ihaskell-display/ihaskell-plot/PlotExample.ipynb ihaskell-plot/ \
     && fix-permissions $EXAMPLES_PATH
-
-# Final cleanup of display library intermediate build states
-USER root
-RUN rm -rf /opt/IHaskell/.stack-work \
-    && rm -rf /opt/hvega/.stack-work \
-    && find /opt/stack/snapshots -type d -name "build" -exec rm -rf {} + \
-    && find /opt/stack -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
-    && find /opt/IHaskell -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete \
-    && find /opt/hvega -type f \( -name "*.o" -o -name "*.dyn_o" \) -delete
-USER $NB_UID
