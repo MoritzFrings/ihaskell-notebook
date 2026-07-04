@@ -116,11 +116,10 @@ jobs:
 
   build-full:
     runs-on: ${{ matrix.runner }}
-    needs: [build-base, merge-base]
+    needs: [build-base]
     if: |
       always() &&
-      (needs.build-base.result == 'success') &&
-      (needs.merge-base.result == 'success' || needs.merge-base.result == 'skipped')
+      (needs.build-base.result == 'success')
     strategy:
       fail-fast: false
       matrix:
@@ -151,15 +150,6 @@ jobs:
         run: |
           echo "IMAGE_NAME_LOWER=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
-      - name: Set base image build arg
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # echo "BASE_IMAGE_ARG=base" >> $GITHUB_ENV
-            echo "BASE_IMAGE_ARG=${{ env.IMAGE_NAME_LOWER }}:${{ github.ref_name }}-base" >> $GITHUB_ENV
-          else
-            echo "BASE_IMAGE_ARG=${{ env.IMAGE_NAME_LOWER }}:${{ github.ref_name }}-base" >> $GITHUB_ENV
-          fi
-
       - name: Build and push full by digest
         id: build
         uses: docker/build-push-action@v7
@@ -167,11 +157,11 @@ jobs:
           context: .
           target: full
           platforms: ${{ matrix.platform }}
-          build-args: |
-            BASE_IMAGE=${{ env.BASE_IMAGE_ARG }}
           # outputs: ${{ github.event_name != 'pull_request' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) || '' }}
           outputs: ${{ format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE_NAME_LOWER) || '' }}
-          cache-from: type=gha,scope=${{ matrix.platform }}-full
+          cache-from: |
+            type=gha,scope=${{ matrix.platform }}-full
+            type=gha,scope=${{ matrix.platform }}-base
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}-full
 
       - name: Export digest
