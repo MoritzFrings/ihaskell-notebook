@@ -93,7 +93,7 @@ RUN mkdir -p /usr/local/share/jupyter \
 # config.
 RUN mkdir -p /opt/bin \
     && fix-permissions /opt/bin
-ENV PATH ${PATH}:/opt/bin
+ENV PATH=${PATH}:/opt/bin
 
 # Specify a git branch for IHaskell (can be branch or tag).
 # The resolver for all stack builds will be chosen from
@@ -167,7 +167,7 @@ RUN mkdir -p /home/jovyan/.local/share/jupyter/runtime \
 # using the IHaskell resolver.
 RUN mkdir -p /opt/ghc && ln -s `stack path --compiler-bin` /opt/ghc/bin \
     && fix-permissions /opt/ghc
-ENV PATH ${PATH}:/opt/ghc/bin
+ENV PATH=${PATH}:/opt/ghc/bin
 
 # Switch back to jovyan user
 USER $NB_UID
