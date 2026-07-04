@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -yq --no-install-recommends \
         gnupg \
         netbase \
         curl \
+        pkg-config \
 # Stack Debian/Ubuntu manual install dependencies
 # https://docs.haskellstack.org/en/stable/install_and_upgrade/#linux-generic
         g++ \
@@ -33,9 +34,6 @@ RUN apt-get update && apt-get install -yq --no-install-recommends \
         make \
         xz-utils \
         zlib1g-dev \
-        git \
-        gnupg \
-        netbase \
 # Need less for general maintenance
         less && \
 # Clean up apt
