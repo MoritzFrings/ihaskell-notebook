@@ -45,3 +45,11 @@ extra-deps:
 - gtk2hs-buildtools-0.13.12.0
 - plot-0.2.3.12
 
+# Build Optimizations for Docker Environment
+build:
+  library-profiling: false
+  executable-profiling: false
+  haddock: false
+
+ghc-options:
+  "$everything": -g0 -O
