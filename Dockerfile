@@ -119,6 +119,9 @@ RUN stack --version \
     && fix-permissions /opt/ghc \
     # Install kernel
     && stack exec ihaskell -- install --stack --prefix=/usr/local \
+    # Reclaim the home directory for jovyan before moving on
+    && chown -R $NB_UID:users /home/$NB_USER \
+    && fix-permissions /home/$NB_USER \
     # Cache clean up
     && rm -rf /opt/IHaskell/.stack-work \
     && rm -rf /opt/hvega/.stack-work \
