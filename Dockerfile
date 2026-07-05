@@ -125,7 +125,6 @@ RUN stack --version \
     # Cache clean up
     && rm -rf /opt/IHaskell/.stack-work \
     && rm -rf /opt/hvega/.stack-work \
-    && rm -rf /opt/stack/global-project/.stack-work \
     \
     && find /opt/stack/snapshots -type d -name "build" -exec rm -rf {} + \
     && find /opt/stack/programs -type f \( -name "*_p.a" -o -name "*.p_hi" \) -delete \
